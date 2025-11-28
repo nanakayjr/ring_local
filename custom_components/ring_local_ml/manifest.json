@@ -10,10 +10,7 @@
     "ffmpeg-python",
     "scikit-image",
     "sqlalchemy",
-    "fastapi",
-    "uvicorn",
-    "paho-mqtt",
-    "pyyaml"
+    "paho-mqtt"
   ],
   "version": "0.1.0",
   "iot_class": "local_polling"
