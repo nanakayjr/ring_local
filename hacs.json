@@ -1,5 +1,0 @@
-{
-  "name": "Ring Local ML",
-  "domains": ["sensor"],
-  "homeassistant": "2023.1.0"
-}
