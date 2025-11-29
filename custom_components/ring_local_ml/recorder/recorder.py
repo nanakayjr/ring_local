@@ -2,9 +2,12 @@ import cv2
 import datetime
 import threading
 import time
+import logging
 
 from .buffer import CircularBuffer
 from .ffmpeg_wrapper import save_clip as save_clip_ffmpeg
+
+_LOGGER = logging.getLogger(__name__)
 
 class Recorder(threading.Thread):
     def __init__(self, camera_id, rtsp_url, buffer_seconds):
@@ -21,14 +24,14 @@ class Recorder(threading.Thread):
             if not self.cap:
                 self.cap = cv2.VideoCapture(self.rtsp_url)
                 if not self.cap.isOpened():
-                    print(f"Error opening video stream for {self.camera_id}")
+                    _LOGGER.error("Error opening video stream for %s", self.camera_id)
                     self.cap = None
                     time.sleep(5)
                     continue
 
             ret, frame = self.cap.read()
             if not ret:
-                print(f"Error reading frame from {self.camera_id}")
+                _LOGGER.error("Error reading frame from %s", self.camera_id)
                 self.cap.release()
                 self.cap = None
                 time.sleep(5)

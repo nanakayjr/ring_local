@@ -21,8 +21,17 @@ async def async_setup_entry(hass, entry, async_add_entities):
 
     for camera in cameras:
         if camera['enabled']:
+            # Instantiate the recorder in the executor (it may allocate heavy resources)
             recorder = await hass.async_add_executor_job(Recorder, camera['id'], camera['rtsp_url'], 5)
-            await hass.async_add_executor_job(recorder.start)
+            # Starting a thread is quick/non-blocking; do it directly rather than scheduling
+            # it through the executor. The recorder's run loop will execute in its own thread.
+            try:
+                recorder.start()
+            except RuntimeError:
+                # If starting fails for any reason, log and continue
+                import logging
+                _LOGGER = logging.getLogger(__name__)
+                _LOGGER.exception("Failed to start recorder thread for %s", camera['id'])
             recorders[camera['id']] = recorder
 
     detector = await hass.async_add_executor_job(Detector)

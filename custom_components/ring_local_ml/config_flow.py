@@ -1,10 +1,14 @@
 """Config flow for Ring Local ML integration."""
+import logging
 import voluptuous as vol
 
 from homeassistant import config_entries
 from homeassistant.core import callback
 
 from .const import DOMAIN, CONF_MQTT_HOST, CONF_MQTT_PORT, CONF_MEDIA_DIR
+
+_LOGGER = logging.getLogger(__name__)
+
 
 class RingLocalMLConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Handle a config flow for Ring Local ML."""
@@ -18,7 +22,11 @@ class RingLocalMLConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         errors = {}
         if user_input is not None:
-            return self.async_create_entry(title="Ring Local ML", data=user_input)
+            try:
+                return self.async_create_entry(title="Ring Local ML", data=user_input)
+            except Exception:  # Guard: don't expose raw exception text (may contain HTML)
+                _LOGGER.exception("Failed to create config entry from user input")
+                errors["base"] = "unknown"
 
         return self.async_show_form(
             step_id="user",
