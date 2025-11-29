@@ -2,9 +2,9 @@
   "domain": "ring_local_ml",
   "name": "Ring Local ML",
   "config_flow": true,
-  "documentation": "https://github.com/your-github-username/ring-local-ml",
-  "issue_tracker": "https://github.com/your-github-username/ring-local-ml/issues",
-  "codeowners": ["@your-github-username"],
+  "documentation": "https://github.com/nanakayjr/ring-local-ml",
+  "issue_tracker": "https://github.com/nanakayjr/ring-local-ml/issues",
+  "codeowners": ["@nanakayjr"],
   "requirements": [
     "opencv-python",
     "ffmpeg-python",
