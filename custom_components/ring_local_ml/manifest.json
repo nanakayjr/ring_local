@@ -5,6 +5,7 @@
   "documentation": "https://github.com/nanakayjr/ring-local-ml",
   "issue_tracker": "https://github.com/nanakayjr/ring-local-ml/issues",
   "codeowners": ["@nanakayjr"],
+  "homeassistant": "2025.7.0",
   "requirements": [
     "opencv-python",
     "ffmpeg-python",
