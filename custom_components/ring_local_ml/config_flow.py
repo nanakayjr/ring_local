@@ -4,7 +4,7 @@ import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.core import callback
 
-from .const import DOMAIN
+from .const import DOMAIN, CONF_MQTT_HOST, CONF_MQTT_PORT, CONF_MEDIA_DIR
 
 class RingLocalMLConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Handle a config flow for Ring Local ML."""
@@ -16,7 +16,18 @@ class RingLocalMLConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if self._async_current_entries():
             return self.async_abort(reason="single_instance_allowed")
 
+        errors = {}
         if user_input is not None:
-            return self.async_create_entry(title="Ring Local ML", data={})
+            return self.async_create_entry(title="Ring Local ML", data=user_input)
 
-        return self.async_show_form(step_id="user")
+        return self.async_show_form(
+            step_id="user",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(CONF_MQTT_HOST, default="localhost"): str,
+                    vol.Required(CONF_MQTT_PORT, default=1883): int,
+                    vol.Required(CONF_MEDIA_DIR, default="/media/ring_local_ml"): str,
+                }
+            ),
+            errors=errors,
+        )
