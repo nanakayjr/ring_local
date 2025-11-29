@@ -209,6 +209,8 @@ Cloud backup option (Syncthing, S3, Backblaze)
 
 Object classification (packages, vehicles)
 
+Brand assets (icon and logo) for the integration.
+
 📄 License
 
 MIT — use freely and modify as needed.
