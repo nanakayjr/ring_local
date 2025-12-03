@@ -18,6 +18,11 @@ Dashboard exposure for media clips + snapshots
 
 Ring devices remain cloud-connected (as required by Ring), but all recordings, detection, and media storage occur entirely locally.
 
+## Compatibility & Versioning
+- Requires Home Assistant 2025.10 or newer (tested on 2025.10.0 and 2025.11.0)
+- Distributed through HACS as version 1.1.0 (custom integration)
+- Works with HACS 1.34+ using rendered README metadata
+
 🎯 Goals
 
 Detect approaching humans or doorbell presses using MQTT + ML
@@ -196,6 +201,10 @@ This project works best with:
 ✔ Event-driven recordings
 ✔ Short RTSP bursts
 ✔ ML detection optimized for low FPS sampling
+
+6. MQTT Entity Mirroring
+
+The Home Assistant integration now mirrors every MQTT topic exposed by the Ring-MQTT add-on for each enrolled camera. That means motion, ding, battery, Wi-Fi and any future metadata emitted under `ring/<camera_id>/#` become dedicated Home Assistant sensors automatically, keeping the integration in sync with everything Ring-MQTT publishes.
 
 🧩 Future Enhancements
 

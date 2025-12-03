@@ -1,11 +1,20 @@
-import cv2
-
 class MotionDetector:
     def __init__(self, min_area=500):
         self.min_area = min_area
-        self.background_subtractor = cv2.createBackgroundSubtractorMOG2()
+        self.background_subtractor = None
 
     def detect(self, frame):
+        # Lazy-initialize OpenCV objects to avoid heavy imports at module load time
+        if self.background_subtractor is None:
+            try:
+                import cv2
+            except Exception:
+                # OpenCV unavailable: return no motion and an empty mask
+                return False, None
+            self.background_subtractor = cv2.createBackgroundSubtractorMOG2()
+
+        import cv2
+
         fg_mask = self.background_subtractor.apply(frame)
         
         # Basic noise reduction

@@ -1,8 +1,19 @@
-import ffmpeg
-import numpy as np
-
 def save_clip(frames, output_path, fps):
     if not frames:
+        return
+
+    try:
+        import ffmpeg
+        import numpy as np
+    except Exception:
+        # If ffmpeg or numpy are not available, log and return silently; callers
+        # should handle the absence of an output file.
+        try:
+            import logging
+            _LOGGER = logging.getLogger(__name__)
+            _LOGGER.exception("ffmpeg or numpy not available; cannot save clip %s", output_path)
+        except Exception:
+            pass
         return
 
     height, width, _ = frames[0].shape

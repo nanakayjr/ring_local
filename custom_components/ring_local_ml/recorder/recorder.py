@@ -1,4 +1,3 @@
-import cv2
 import datetime
 import threading
 import time
@@ -22,6 +21,13 @@ class Recorder(threading.Thread):
         self.running = True
         while self.running:
             if not self.cap:
+                try:
+                    import cv2
+                except Exception:
+                    _LOGGER.exception("OpenCV not available; recorder cannot open stream for %s", self.camera_id)
+                    time.sleep(5)
+                    continue
+
                 self.cap = cv2.VideoCapture(self.rtsp_url)
                 if not self.cap.isOpened():
                     _LOGGER.error("Error opening video stream for %s", self.camera_id)

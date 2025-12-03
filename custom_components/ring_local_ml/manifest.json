@@ -5,13 +5,14 @@
   "documentation": "https://github.com/nanakayjr/ring-local-ml",
   "issue_tracker": "https://github.com/nanakayjr/ring-local-ml/issues",
   "codeowners": ["@nanakayjr"],
-  "homeassistant": "2025.7.0",
+  "homeassistant": "2025.10.0",
   "requirements": [
-    "opencv-python",
-    "ffmpeg-python",
-    "scikit-image",
-    "sqlalchemy"
+    "opencv-python-headless==4.8.0.76",
+    "ffmpeg-python==0.2.0",
+    "scikit-image==0.22.0",
+    "sqlalchemy==2.0.23"
   ],
-  "version": "1.11.25",
+  "version": "1.1.0",
+  "integration_type": "hub",
   "iot_class": "local_push"
 }

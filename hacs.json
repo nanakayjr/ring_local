@@ -1,5 +1,6 @@
 {
   "name": "Ring Local ML",
-  "homeassistant": "2025.7.0",
-  "domains": ["sensor"]
+  "homeassistant": "2025.10.0",
+  "domains": ["sensor"],
+  "render_readme": true
 }
