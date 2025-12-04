@@ -195,25 +195,6 @@ async def async_setup_entry(hass, entry, async_add_entities):
     detector = Detector()
     entity_manager = RingMQTTSensorManager(async_add_entities)
 
-    # Create sensors for common Ring-MQTT topics immediately so entities
-    # show up in Home Assistant even if the MQTT broker hasn't emitted
-    # recent messages yet.
-    common_topics = [
-        "motion",
-        "ding",
-        "battery",
-        "battery_level",
-        "battery_charging",
-        "wifi",
-        "rssi",
-        "tamper",
-        "status",
-        "signal",
-    ]
-    for camera in cameras:
-        for topic in common_topics:
-            entity_manager.get_or_create(camera["id"], topic)
-
     event_entities = []
     event_entity_index: Dict[str, RingLocalMLEventSensor] = {}
     for camera in cameras:

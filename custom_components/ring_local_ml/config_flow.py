@@ -71,30 +71,10 @@ class RingLocalMLOptionsFlowHandler(config_entries.OptionsFlow):
         )
 
     async def async_step_camera_menu(self, user_input=None):
-        """Handle the camera menu step.
-
-        The previous implementation used `async_show_menu` which renders
-        translated menu labels; some front-end themes can make those labels
-        invisible. Presenting an explicit form with an `action` selector
-        ensures visible, human-friendly choices across themes.
-        """
-        if user_input is not None:
-            action = user_input.get("action")
-            if action == "Add Camera":
-                return await self.async_step_camera()
-            if action == "Finish":
-                return await self.async_step_finish()
-
-        return self.async_show_form(
+        """Handle the camera menu step."""
+        return self.async_show_menu(
             step_id="camera_menu",
-            data_schema=vol.Schema(
-                {
-                    vol.Required("action", default="Add Camera"): vol.In([
-                        "Add Camera",
-                        "Finish",
-                    ])
-                }
-            ),
+            menu_options=["camera", "finish"],
         )
     
     async def async_step_finish(self, user_input=None):

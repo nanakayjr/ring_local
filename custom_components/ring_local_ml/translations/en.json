@@ -1,0 +1,39 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Ring Local ML",
+        "description": "Configure MQTT connectivity and media storage for Ring Local ML.",
+        "data": {
+          "mqtt_host": "MQTT host",
+          "mqtt_port": "MQTT port",
+          "media_dir": "Media directory"
+        }
+      }
+    }
+  },
+  "options": {
+    "step": {
+      "camera": {
+        "title": "Add Ring camera",
+        "description": "Provide the Ring-MQTT camera ID and the RTSP URL exposed by go2rtc/Ring-MQTT.",
+        "data": {
+          "id": "Camera ID",
+          "rtsp_url": "RTSP URL"
+        }
+      },
+      "camera_menu": {
+        "title": "Ring Local ML cameras",
+        "description": "Select an action for the camera list.",
+        "menu_options": {
+          "camera": "Add another camera",
+          "finish": "Save cameras"
+        }
+      },
+      "finish": {
+        "title": "Ring Local ML cameras",
+        "description": "Camera list saved."
+      }
+    }
+  }
+}
