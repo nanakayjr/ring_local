@@ -88,7 +88,7 @@ Person approaching
 
 General motion (optional fallback)
 
-On detection:
+On detection: lns
 
 Extract pre-event buffer (X seconds)
 

@@ -25,6 +25,13 @@ PRE_EVENT_SECONDS = 5
 POST_EVENT_SECONDS = 10
 CLIP_FPS = 20
 
+
+def _default_camera_name(camera_id: str) -> str:
+    suffix = camera_id[-4:] if camera_id else ""
+    if suffix:
+        return f"Ring Camera {suffix}"
+    return "Ring Camera"
+
 DEFAULT_TOPIC_SUFFIXES = [
     "motion",
     "ding",
@@ -41,6 +48,41 @@ DEFAULT_TOPIC_SUFFIXES = [
     "light/state",
     "pir/state",
 ]
+
+TOPIC_LABELS = {
+    "motion": "Motion",
+    "ding": "Doorbell",
+    "doorbell/state": "Doorbell State",
+    "doorbell/event": "Doorbell Event",
+    "battery/level": "Battery Level",
+    "battery/charging": "Battery Charging",
+    "health/state": "Health State",
+    "health/online": "Health Online",
+    "wifi/signal": "Wi-Fi Signal",
+    "wifi/rssi": "Wi-Fi RSSI",
+    "snapshot/url": "Snapshot URL",
+    "snapshot/available": "Snapshot Available",
+    "light/state": "Light State",
+    "pir/state": "PIR State",
+}
+
+DEFAULT_SENSOR_STATE = "idle"
+DEFAULT_TOPIC_STATES = {
+    "motion": "idle",
+    "ding": "idle",
+    "doorbell/state": "idle",
+    "doorbell/event": "idle",
+    "battery/level": 0,
+    "battery/charging": "off",
+    "health/state": "initializing",
+    "health/online": "offline",
+    "wifi/signal": 0,
+    "wifi/rssi": -100,
+    "snapshot/url": "",
+    "snapshot/available": "off",
+    "light/state": "off",
+    "pir/state": "idle",
+}
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -68,7 +110,18 @@ def _camera_display_name(camera_id: str, camera_meta: Dict[str, Dict]) -> str:
         value = meta.get(key)
         if isinstance(value, str) and value.strip():
             return value.strip()
-    return f"Ring Camera {camera_id}"
+    return _default_camera_name(camera_id)
+
+
+def _topic_label(topic_suffix: str) -> str:
+    if topic_suffix in TOPIC_LABELS:
+        return TOPIC_LABELS[topic_suffix]
+    cleaned = topic_suffix.replace("_", " ").replace("/", " ")
+    return cleaned.title()
+
+
+def _default_state_for_topic(topic_suffix: str):
+    return DEFAULT_TOPIC_STATES.get(topic_suffix, DEFAULT_SENSOR_STATE)
 
 
 def _normalize_state(value):
@@ -157,13 +210,15 @@ class RingLocalMQTTSensor(SensorEntity):
         self._camera_id = camera_id
         self._topic_suffix = topic_suffix or "state"
         slug = self._topic_suffix.replace("/", "_")
-        self._attr_name = f"Ring Local ML {camera_id} {self._topic_suffix}"
+        label = _topic_label(self._topic_suffix)
+        self._friendly_name = f"{device_name} {label}".strip()
+        self._attr_name = self._friendly_name
         self._attr_unique_id = f"ring_local_ml_{camera_id}_{slug}"
         self._attr_extra_state_attributes = {
             "camera_id": camera_id,
             "topic": self._topic_suffix,
         }
-        self._attr_native_value = None
+        self._attr_native_value = _default_state_for_topic(self._topic_suffix)
         self._device_info = DeviceInfo(
             identifiers={(DOMAIN, camera_id)},
             manufacturer="Ring",
@@ -177,6 +232,8 @@ class RingLocalMQTTSensor(SensorEntity):
     def handle_payload(self, payload_text: str):
         state, attrs = _extract_state_and_attrs(payload_text)
         state = _normalize_state(state)
+        if state is None:
+            state = _default_state_for_topic(self._topic_suffix)
         metadata = {
             "camera_id": self._camera_id,
             "topic": self._topic_suffix,
@@ -273,7 +330,10 @@ async def async_setup_entry(hass, entry, async_add_entities):
         payload_text = _decode_payload(msg.payload)
 
         if camera_id not in camera_meta:
-            camera_meta[camera_id] = {"id": camera_id}
+            camera_meta[camera_id] = {
+                "id": camera_id,
+                "name": _default_camera_name(camera_id),
+            }
             entity_manager.update_camera_meta(camera_id, camera_meta[camera_id])
             entity_manager.prime_camera_topics(camera_id)
             device_name = _camera_display_name(camera_id, camera_meta)
@@ -365,9 +425,9 @@ class RingLocalMLEventSensor(SensorEntity):
 
     def __init__(self, camera_id, device_name):
         self._camera_id = camera_id
-        self._attr_name = f"Ring Local ML Event ({camera_id})"
+        self._attr_name = f"{device_name} Events"
         self._attr_unique_id = f"ring_local_ml_event_{camera_id}"
-        self._attr_native_value = None
+        self._attr_native_value = "idle"
         self._attr_extra_state_attributes = {
             "camera_id": camera_id,
         }

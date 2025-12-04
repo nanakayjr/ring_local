@@ -1,5 +1,8 @@
 {
   "config": {
+    "error": {
+      "duplicate_id": "That camera ID is already configured."
+    },
     "step": {
       "user": {
         "title": "Ring Local ML",
@@ -13,22 +16,35 @@
     }
   },
   "options": {
+    "error": {
+      "duplicate_id": "That camera ID is already configured."
+    },
     "step": {
       "camera": {
         "title": "Add Ring camera",
         "description": "Provide the Ring-MQTT camera ID and the RTSP URL exposed by go2rtc/Ring-MQTT.",
         "data": {
           "id": "Camera ID",
+          "name": "Friendly name",
           "rtsp_url": "RTSP URL"
         }
       },
       "camera_menu": {
         "title": "Ring Local ML cameras",
-        "description": "Select an action for the camera list.",
+        "description": "Select an action for the camera list. Currently tracking {count} cameras.",
         "menu_options": {
           "camera": "Add another camera",
+          "edit_camera": "Edit existing camera",
           "finish": "Save cameras"
         }
+      },
+      "select_camera": {
+        "title": "Edit camera",
+        "description": "Choose which camera to edit."
+      },
+      "edit_camera": {
+        "title": "Update camera",
+        "description": "Modify the friendly name or RTSP URL."
       },
       "finish": {
         "title": "Ring Local ML cameras",

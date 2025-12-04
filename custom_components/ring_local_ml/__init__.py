@@ -72,7 +72,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
                 if any(c.get("id") == camera_id for c in cameras):
                     return
 
-                candidate = {"id": camera_id}
+                suffix = camera_id[-4:] if camera_id else ""
+                candidate = {
+                    "id": camera_id,
+                    "name": f"Ring Camera {suffix}" if suffix else f"Ring Camera {camera_id}",
+                }
                 if rtsp_url:
                     candidate["rtsp_url"] = rtsp_url
                 else:
