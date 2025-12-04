@@ -16,13 +16,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
     # Forward the setup to the sensor platform. Wrap in try/except so errors
     # are logged and do not raise uncaught exceptions that surface as 500.
     try:
-        # Use the plural API (async_forward_entry_setups) which accepts a list
-        # of platforms. Some Home Assistant versions do not provide the
-        # singular helper on the ConfigEntries object, so prefer the
-        # compatibility call.
-        hass.async_create_task(
-            hass.config_entries.async_forward_entry_setups(entry, ["sensor"])
-        )
+        # Await the forward setup so the integration setup lock remains held
+        # until the platforms are fully set up. Scheduling the call as a
+        # background task releases the lock early and will stop working in
+        # newer Home Assistant versions.
+        await hass.config_entries.async_forward_entry_setups(entry, ["sensor"])
     except Exception:
         _LOGGER.exception("Failed to forward entry setup to sensor platform for %s", entry.entry_id)
         return False
