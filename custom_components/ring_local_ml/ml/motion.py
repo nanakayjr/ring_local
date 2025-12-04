@@ -1,33 +1,27 @@
+import numpy as np
+
+
 class MotionDetector:
-    def __init__(self, min_area=500):
+    """Simple frame differencing detector implemented with NumPy only."""
+
+    def __init__(self, min_area=500, decay=0.9, threshold=20):
         self.min_area = min_area
-        self.background_subtractor = None
+        self.decay = decay
+        self.threshold = threshold
+        self._background = None
 
     def detect(self, frame):
-        # Lazy-initialize OpenCV objects to avoid heavy imports at module load time
-        if self.background_subtractor is None:
-            try:
-                import cv2
-            except Exception:
-                # OpenCV unavailable: return no motion and an empty mask
-                return False, None
-            self.background_subtractor = cv2.createBackgroundSubtractorMOG2()
+        if frame is None:
+            return False, None
 
-        import cv2
+        gray = frame.mean(axis=2).astype(np.float32)
+        if self._background is None:
+            self._background = gray
+            return False, np.zeros_like(gray, dtype=np.uint8)
 
-        fg_mask = self.background_subtractor.apply(frame)
-        
-        # Basic noise reduction
-        fg_mask = cv2.GaussianBlur(fg_mask, (21, 21), 0)
-        fg_mask = cv2.threshold(fg_mask, 25, 255, cv2.THRESH_BINARY)[1]
-        
-        # Find contours
-        contours, _ = cv2.findContours(fg_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-        
-        motion_detected = False
-        for contour in contours:
-            if cv2.contourArea(contour) > self.min_area:
-                motion_detected = True
-                break
-        
-        return motion_detected, fg_mask
+        diff = np.abs(gray - self._background)
+        self._background = self.decay * self._background + (1 - self.decay) * gray
+
+        mask = (diff > self.threshold).astype(np.uint8)
+        motion_pixels = int(mask.sum())
+        return motion_pixels > self.min_area, mask

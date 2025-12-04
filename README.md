@@ -22,6 +22,8 @@ Ring devices remain cloud-connected (as required by Ring), but all recordings, d
 - Requires Home Assistant 2025.10 or newer (tested on 2025.10.0 and 2025.11.0)
 - Distributed through HACS as version 1.1.0 (custom integration)
 - Works with HACS 1.34+ using rendered README metadata
+- No third-party wheels are installed at runtime; the integration relies on Home Assistant's bundled ffmpeg/numpy stack so config flows no longer fail due to missing build tooling
+- Optional face detection still hooks into OpenCV — if you copy a `cv2` wheel into Home Assistant manually, the integration will auto-enable it, otherwise it operates purely on Ring-MQTT events
 
 🎯 Goals
 

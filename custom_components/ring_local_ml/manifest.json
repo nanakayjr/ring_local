@@ -7,11 +7,7 @@
   "codeowners": ["@nanakayjr"],
   "homeassistant": "2025.10.0",
   "requirements": [
-    "opencv-python-headless==4.10.0.84",
-    "setuptools>=70.1.0",
-    "ffmpeg-python==0.2.0",
-    "scikit-image==0.22.0",
-    "sqlalchemy==2.0.23"
+    "ffmpeg-python==0.2.0"
   ],
   "version": "1.1.0",
   "integration_type": "hub",

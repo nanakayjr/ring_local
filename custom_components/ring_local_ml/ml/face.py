@@ -17,7 +17,7 @@ class FaceDetector:
         try:
             import cv2
         except Exception:
-            _LOGGER.exception("OpenCV not available; face detection disabled")
+            _LOGGER.warning("OpenCV not available; face detection disabled for %s", self.__class__.__name__)
             self.face_cascade = None
             return
 
@@ -35,7 +35,7 @@ class FaceDetector:
         try:
             import cv2
         except Exception:
-            _LOGGER.exception("OpenCV not available at detect time; skipping face detection")
+            _LOGGER.debug("OpenCV still unavailable; skipping face detection")
             return False, []
 
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)

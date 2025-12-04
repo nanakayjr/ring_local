@@ -1,20 +1,28 @@
 """Sensor platform for the Ring Local ML integration."""
+import asyncio
 from datetime import datetime
 import json
 import logging
+import os
 from typing import Dict, Tuple
 
-import cv2
+import numpy as np
+from PIL import Image
 import voluptuous as vol
 from homeassistant.components.sensor import SensorEntity
 from homeassistant.core import callback
 import homeassistant.components.mqtt as mqtt
 
-from .const import DOMAIN, CONF_MQTT_HOST, CONF_MQTT_PORT, CONF_MEDIA_DIR
+from .const import CONF_MEDIA_DIR
 from .recorder.recorder import Recorder
 from .ml.detector import Detector
-from .storage.db import get_session, Event
+from .storage.db import record_event
 from .storage.filesystem import create_media_paths, get_clip_path, get_snapshot_path
+
+
+PRE_EVENT_SECONDS = 5
+POST_EVENT_SECONDS = 10
+CLIP_FPS = 20
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -106,6 +114,13 @@ def _payload_is_active(text: str) -> bool:
     return _value_truthy(parsed)
 
 
+def _save_snapshot(path: str, frame):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    rgb_frame = frame[:, :, ::-1]
+    image = Image.fromarray(rgb_frame.astype(np.uint8))
+    image.save(path)
+
+
 class RingLocalMQTTSensor(SensorEntity):
     """Dynamic sensor that mirrors every MQTT topic exposed by Ring-MQTT."""
 
@@ -163,10 +178,17 @@ async def async_setup_entry(hass, entry, async_add_entities):
     """Set up the sensor platform."""
 
     media_dir = entry.data[CONF_MEDIA_DIR]
+    media_db = os.path.join(media_dir, "media.db")
     cameras = entry.options.get("cameras", [])
     recorders = {}
     for camera in cameras:
-        recorder = Recorder(camera["id"], camera["rtsp_url"], 5)
+        buffer_window = PRE_EVENT_SECONDS + POST_EVENT_SECONDS + 5
+        recorder = Recorder(
+            camera["id"],
+            camera["rtsp_url"],
+            buffer_window,
+            fps=CLIP_FPS,
+        )
         recorders[camera["id"]] = recorder
         await hass.async_add_executor_job(recorder.start)
 
@@ -210,6 +232,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
                     recorders,
                     detector,
                     media_dir,
+                    media_db,
                 )
             )
 
@@ -229,40 +252,41 @@ async def async_reload_entry(hass, entry):
     await hass.config_entries.async_reload(entry.entry_id)
 
 
-async def handle_mqtt_message(hass, camera_id, event_type, recorders, detector, media_dir):
+async def handle_mqtt_message(hass, camera_id, event_type, recorders, detector, media_dir, media_db):
     """Handle motion/ding MQTT messages that trigger recording and ML."""
 
     recorder = recorders.get(camera_id)
     if not recorder:
         return
+
+    await asyncio.sleep(POST_EVENT_SECONDS)
     
     def _save_and_detect():
         try:
             media_path = create_media_paths(media_dir, camera_id)
             clip_path = get_clip_path(media_path, event_type)
-            recorder.save_clip(clip_path, 5, 10, 20)
+            recorder.save_clip(clip_path, PRE_EVENT_SECONDS, POST_EVENT_SECONDS, CLIP_FPS)
 
             frames = recorder.buffer.get_all()
             face_detected = False
             snapshot_path = None
             for frame, ts in frames:
-                motion, face = detector.detect(frame, detect_motion=False, detect_faces=True)
+                _, face = detector.detect(frame, detect_motion=False, detect_faces=True)
                 if face:
                     face_detected = True
                     snapshot_path = get_snapshot_path(media_path, f"{event_type}_face")
-                    cv2.imwrite(snapshot_path, frame)
+                    _save_snapshot(snapshot_path, frame)
                     break
-            
-            with get_session(f"sqlite:///{media_dir}/media.db") as session:
-                event = Event(
-                    camera_id=camera_id,
-                    event_type=event_type,
-                    clip_path=clip_path,
-                    snapshot_path=snapshot_path,
-                    face_detected=face_detected,
-                    duration=15
-                )
-                session.add(event)
+
+            record_event(
+                media_db,
+                camera_id=camera_id,
+                event_type=event_type,
+                clip_path=clip_path,
+                snapshot_path=snapshot_path,
+                face_detected=face_detected,
+                duration=PRE_EVENT_SECONDS + POST_EVENT_SECONDS,
+            )
         except Exception as e:
             _LOGGER.exception("Error during save and detect: %s", e)
 
