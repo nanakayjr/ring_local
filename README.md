@@ -208,6 +208,8 @@ This project works best with:
 
 The Home Assistant integration now mirrors every MQTT topic exposed by the Ring-MQTT add-on for each enrolled camera. That means motion, ding, battery, Wi-Fi and any future metadata emitted under `ring/<camera_id>/#` become dedicated Home Assistant sensors automatically, keeping the integration in sync with everything Ring-MQTT publishes.
 
+- Newly discovered Ring cameras automatically appear as Home Assistant devices, and the integration pre-creates sensors for common Ring-MQTT topics even before the first payload arrives, so you no longer see “1 entity” placeholders.
+
 🧩 Future Enhancements
 
 On-device face recognition (embeddings database)

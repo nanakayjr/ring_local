@@ -12,8 +12,9 @@ import voluptuous as vol
 from homeassistant.components.sensor import SensorEntity
 from homeassistant.core import callback
 import homeassistant.components.mqtt as mqtt
+from homeassistant.helpers.device_registry import DeviceInfo
 
-from .const import CONF_MEDIA_DIR
+from .const import DOMAIN, CONF_MEDIA_DIR
 from .recorder.recorder import Recorder
 from .ml.detector import Detector
 from .storage.db import record_event
@@ -23,6 +24,23 @@ from .storage.filesystem import create_media_paths, get_clip_path, get_snapshot_
 PRE_EVENT_SECONDS = 5
 POST_EVENT_SECONDS = 10
 CLIP_FPS = 20
+
+DEFAULT_TOPIC_SUFFIXES = [
+    "motion",
+    "ding",
+    "doorbell/state",
+    "doorbell/event",
+    "battery/level",
+    "battery/charging",
+    "health/state",
+    "health/online",
+    "wifi/signal",
+    "wifi/rssi",
+    "snapshot/url",
+    "snapshot/available",
+    "light/state",
+    "pir/state",
+]
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -42,6 +60,15 @@ def _decode_payload(payload) -> str:
         except UnicodeDecodeError:
             return payload.decode("utf-8", "ignore")
     return str(payload)
+
+
+def _camera_display_name(camera_id: str, camera_meta: Dict[str, Dict]) -> str:
+    meta = camera_meta.get(camera_id) or {}
+    for key in ("name", "label", "friendly_name"):
+        value = meta.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return f"Ring Camera {camera_id}"
 
 
 def _normalize_state(value):
@@ -126,7 +153,7 @@ class RingLocalMQTTSensor(SensorEntity):
 
     _attr_should_poll = False
 
-    def __init__(self, camera_id: str, topic_suffix: str):
+    def __init__(self, camera_id: str, topic_suffix: str, device_name: str):
         self._camera_id = camera_id
         self._topic_suffix = topic_suffix or "state"
         slug = self._topic_suffix.replace("/", "_")
@@ -137,6 +164,15 @@ class RingLocalMQTTSensor(SensorEntity):
             "topic": self._topic_suffix,
         }
         self._attr_native_value = None
+        self._device_info = DeviceInfo(
+            identifiers={(DOMAIN, camera_id)},
+            manufacturer="Ring",
+            name=device_name,
+        )
+
+    @property
+    def device_info(self):
+        return self._device_info
 
     def handle_payload(self, payload_text: str):
         state, attrs = _extract_state_and_attrs(payload_text)
@@ -160,18 +196,27 @@ class RingLocalMQTTSensor(SensorEntity):
 class RingMQTTSensorManager:
     """Ensure one HA sensor per MQTT topic."""
 
-    def __init__(self, async_add_entities):
+    def __init__(self, async_add_entities, camera_meta):
         self._async_add_entities = async_add_entities
         self._entities: Dict[Tuple[str, str], RingLocalMQTTSensor] = {}
+        self._camera_meta = camera_meta
+
+    def update_camera_meta(self, camera_id: str, meta: Dict):
+        self._camera_meta[camera_id] = meta
 
     def get_or_create(self, camera_id: str, topic_suffix: str) -> RingLocalMQTTSensor:
         normalized = topic_suffix or "state"
         key = (camera_id, normalized)
         if key not in self._entities:
-            entity = RingLocalMQTTSensor(camera_id, normalized)
+            name = _camera_display_name(camera_id, self._camera_meta)
+            entity = RingLocalMQTTSensor(camera_id, normalized, name)
             self._entities[key] = entity
             self._async_add_entities([entity])
         return self._entities[key]
+
+    def prime_camera_topics(self, camera_id: str):
+        for suffix in DEFAULT_TOPIC_SUFFIXES:
+            self.get_or_create(camera_id, suffix)
 
 
 async def async_setup_entry(hass, entry, async_add_entities):
@@ -179,28 +224,39 @@ async def async_setup_entry(hass, entry, async_add_entities):
 
     media_dir = entry.data[CONF_MEDIA_DIR]
     media_db = os.path.join(media_dir, "media.db")
-    cameras = entry.options.get("cameras", [])
+    cameras = [c for c in entry.options.get("cameras", []) if c.get("id")]
+    camera_meta: Dict[str, Dict] = {c["id"]: c for c in cameras}
+
     recorders = {}
     for camera in cameras:
+        camera_id = camera["id"]
+        rtsp_url = camera.get("rtsp_url")
+        if not rtsp_url:
+            _LOGGER.debug("Camera %s has no RTSP URL; skipping recorder", camera_id)
+            continue
+
         buffer_window = PRE_EVENT_SECONDS + POST_EVENT_SECONDS + 5
         recorder = Recorder(
-            camera["id"],
-            camera["rtsp_url"],
+            camera_id,
+            rtsp_url,
             buffer_window,
             fps=CLIP_FPS,
         )
-        recorders[camera["id"]] = recorder
+        recorders[camera_id] = recorder
         await hass.async_add_executor_job(recorder.start)
 
     detector = Detector()
-    entity_manager = RingMQTTSensorManager(async_add_entities)
+    entity_manager = RingMQTTSensorManager(async_add_entities, camera_meta)
 
     event_entities = []
     event_entity_index: Dict[str, RingLocalMLEventSensor] = {}
     for camera in cameras:
-        event_sensor = RingLocalMLEventSensor(camera["id"])
+        camera_id = camera["id"]
+        device_name = _camera_display_name(camera_id, camera_meta)
+        event_sensor = RingLocalMLEventSensor(camera_id, device_name)
         event_entities.append(event_sensor)
-        event_entity_index[camera["id"]] = event_sensor
+        event_entity_index[camera_id] = event_sensor
+        entity_manager.prime_camera_topics(camera_id)
 
     if event_entities:
         async_add_entities(event_entities)
@@ -215,6 +271,15 @@ async def async_setup_entry(hass, entry, async_add_entities):
         camera_id = topic_parts[1]
         topic_suffix = "/".join(topic_parts[2:]) or "state"
         payload_text = _decode_payload(msg.payload)
+
+        if camera_id not in camera_meta:
+            camera_meta[camera_id] = {"id": camera_id}
+            entity_manager.update_camera_meta(camera_id, camera_meta[camera_id])
+            entity_manager.prime_camera_topics(camera_id)
+            device_name = _camera_display_name(camera_id, camera_meta)
+            event_sensor = RingLocalMLEventSensor(camera_id, device_name)
+            event_entity_index[camera_id] = event_sensor
+            async_add_entities([event_sensor])
 
         sensor_entity = entity_manager.get_or_create(camera_id, topic_suffix)
         sensor_entity.handle_payload(payload_text)
@@ -236,13 +301,13 @@ async def async_setup_entry(hass, entry, async_add_entities):
                 )
             )
 
-    for camera in cameras:
-        await mqtt.async_subscribe(
-            hass,
-            f"ring/{camera['id']}/#",
-            message_received,
-            1,
-        )
+    unsub = await mqtt.async_subscribe(
+        hass,
+        "ring/+/+",
+        message_received,
+        1,
+    )
+    entry.async_on_unload(unsub)
 
     entry.add_update_listener(async_reload_entry)
 
@@ -298,7 +363,7 @@ class RingLocalMLEventSensor(SensorEntity):
 
     _attr_should_poll = False
 
-    def __init__(self, camera_id):
+    def __init__(self, camera_id, device_name):
         self._camera_id = camera_id
         self._attr_name = f"Ring Local ML Event ({camera_id})"
         self._attr_unique_id = f"ring_local_ml_event_{camera_id}"
@@ -306,6 +371,11 @@ class RingLocalMLEventSensor(SensorEntity):
         self._attr_extra_state_attributes = {
             "camera_id": camera_id,
         }
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, camera_id)},
+            manufacturer="Ring",
+            name=device_name,
+        )
 
     def handle_event(self, event_type: str, payload: str):
         """Update the sensor state when motion or ding events arrive."""

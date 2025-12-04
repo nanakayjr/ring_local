@@ -41,6 +41,9 @@ class RingLocalMLConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 class RingLocalMLOptionsFlowHandler(config_entries.OptionsFlow):
     """Handle a option flow for Ring Local ML."""
 
+    MENU_ADD = "add_camera"
+    MENU_FINISH = "finish"
+
     def __init__(self, config_entry: config_entries.ConfigEntry):
         """Initialize options flow."""
         # Do NOT overwrite the base class' `config_entry` property; store
@@ -71,10 +74,29 @@ class RingLocalMLOptionsFlowHandler(config_entries.OptionsFlow):
         )
 
     async def async_step_camera_menu(self, user_input=None):
-        """Handle the camera menu step."""
-        return self.async_show_menu(
+        """Let the user choose to add another camera or finish."""
+        if user_input is not None:
+            action = user_input.get("action")
+            if action == self.MENU_ADD:
+                return await self.async_step_camera()
+            if action == self.MENU_FINISH:
+                return await self.async_step_finish()
+
+        choices = {
+            self.MENU_ADD: "Add another camera",
+            self.MENU_FINISH: "Save cameras",
+        }
+
+        return self.async_show_form(
             step_id="camera_menu",
-            menu_options=["camera", "finish"],
+            data_schema=vol.Schema(
+                {
+                    vol.Required("action", default=self.MENU_FINISH): vol.In(choices)
+                }
+            ),
+            description_placeholders={
+                "count": str(len(self.options.get("cameras", [])))
+            },
         )
     
     async def async_step_finish(self, user_input=None):
