@@ -79,4 +79,7 @@ class RingLocalMLOptionsFlowHandler(config_entries.OptionsFlow):
     
     async def async_step_finish(self, user_input=None):
         """Handle the finish step."""
-        return self.async_create_entry(title="", data=self.options)
+        # Provide a meaningful title so the options-flow finish dialog shows
+        # readable text instead of an empty popup.
+        title = "Ring Local ML Cameras"
+        return self.async_create_entry(title=title, data=self.options)
