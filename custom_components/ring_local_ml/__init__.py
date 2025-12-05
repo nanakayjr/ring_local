@@ -92,7 +92,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
 
         # Subscribe to ring topics for this entry. Keep the returned unsubscribe
         # callable so we can remove the subscription on unload.
-        unsub = await mqtt.async_subscribe(hass, "ring/+/+", _on_mqtt_message, 1)
+        unsub = await mqtt.async_subscribe(hass, "ring/#", _on_mqtt_message, 1)
         hass.data[DOMAIN].setdefault(entry.entry_id, {})["mqtt_unsub"] = unsub
     except Exception:
         _LOGGER.debug("MQTT discovery unavailable; skipping auto-discovery of Ring cameras")
