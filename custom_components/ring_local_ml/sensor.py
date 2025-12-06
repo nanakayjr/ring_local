@@ -36,6 +36,10 @@ def _default_camera_name(camera_id: str) -> str:
 DEFAULT_TOPIC_SUFFIXES = [
     "motion/state",
     "motion/attributes",
+    "motion/last_motion",
+    "motion/last_motion_time",
+    "motion/person_detected",
+    "motion/detection_enabled",
     "ding/state",
     "ding/attributes",
     "wireless/attributes",
@@ -64,6 +68,10 @@ DEFAULT_TOPIC_SUFFIXES = [
 TOPIC_LABELS = {
     "motion/state": "Motion",
     "motion/attributes": "Motion Attributes",
+    "motion/last_motion": "Last Motion Timestamp",
+    "motion/last_motion_time": "Last Motion Time",
+    "motion/person_detected": "Person Detected",
+    "motion/detection_enabled": "Motion Detection Enabled",
     "ding/state": "Doorbell",
     "ding/attributes": "Doorbell Attributes",
     "wireless/attributes": "Wireless Attributes",
@@ -93,6 +101,10 @@ DEFAULT_SENSOR_STATE = "idle"
 DEFAULT_TOPIC_STATE_OVERRIDES = {
     "motion/state": "idle",
     "ding/state": "idle",
+    "motion/last_motion": 0,
+    "motion/last_motion_time": "",
+    "motion/person_detected": "off",
+    "motion/detection_enabled": "off",
     "wireless/network": "",
     "wireless/signal": -100,
     "battery/level": 0,
@@ -142,6 +154,12 @@ ATTRIBUTE_SPLITS = {
     "battery/attributes": {
         "batteryLevel": {"suffix": "battery/level"},
         "batteryLife": {"suffix": "battery/life"},
+    },
+    "motion/attributes": {
+        "lastMotion": {"suffix": "motion/last_motion"},
+        "lastMotionTime": {"suffix": "motion/last_motion_time"},
+        "personDetected": {"suffix": "motion/person_detected"},
+        "motionDetectionEnabled": {"suffix": "motion/detection_enabled"},
     },
 }
 
