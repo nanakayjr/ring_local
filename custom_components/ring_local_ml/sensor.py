@@ -438,14 +438,14 @@ async def async_setup_entry(hass, entry, async_add_entities):
 
         topic_suffix = topic.topic_suffix or "state"
         payload_text = _decode_payload(msg.payload)
-        "wireless/attributes": {
-            "wirelessNetwork": {"suffix": "wireless/network"},
-            "wirelessSignal": {"suffix": "wireless/signal"},
-        },
-        "battery/attributes": {
-            "batteryLevel": {"suffix": "battery/level"},
-            "batteryLife": {"suffix": "battery/life"},
-        },
+        camera_id = topic.device_id
+
+        meta = camera_meta.get(camera_id)
+        if not meta:
+            legacy_meta = camera_meta.get(topic.location_id)
+            if legacy_meta:
+                meta = legacy_meta
+                camera_meta[camera_id] = meta
                 entity_manager.update_camera_meta(camera_id, meta)
                 if topic.location_id in event_entity_index and camera_id not in event_entity_index:
                     event_entity_index[camera_id] = event_entity_index[topic.location_id]
