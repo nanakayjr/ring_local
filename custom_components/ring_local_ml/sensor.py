@@ -38,6 +38,12 @@ DEFAULT_TOPIC_SUFFIXES = [
     "motion/attributes",
     "ding/state",
     "ding/attributes",
+    "wireless/attributes",
+    "wireless/network",
+    "wireless/signal",
+    "battery/attributes",
+    "battery/level",
+    "battery/life",
     "motion_detection/state",
     "motion_warning/state",
     "light/state",
@@ -60,6 +66,12 @@ TOPIC_LABELS = {
     "motion/attributes": "Motion Attributes",
     "ding/state": "Doorbell",
     "ding/attributes": "Doorbell Attributes",
+    "wireless/attributes": "Wireless Attributes",
+    "wireless/network": "Wireless Network",
+    "wireless/signal": "Wireless Signal",
+    "battery/attributes": "Battery Attributes",
+    "battery/level": "Battery Level",
+    "battery/life": "Battery Life",
     "motion_detection/state": "Motion Detection",
     "motion_warning/state": "Motion Warning",
     "light/state": "Light State",
@@ -81,6 +93,10 @@ DEFAULT_SENSOR_STATE = "idle"
 DEFAULT_TOPIC_STATE_OVERRIDES = {
     "motion/state": "idle",
     "ding/state": "idle",
+    "wireless/network": "",
+    "wireless/signal": -100,
+    "battery/level": 0,
+    "battery/life": 0,
     "motion_detection/state": "off",
     "motion_warning/state": "off",
     "light/state": "off",
@@ -102,6 +118,8 @@ DEFAULT_TOPIC_STATE_OVERRIDES = {
 DEFAULT_ENTITY_STATE_OVERRIDES = {
     "motion": "idle",
     "ding": "idle",
+    "wireless": "",
+    "battery": 0,
     "info": "{}",
     "snapshot": "{}",
     "snapshot_interval": 0,
@@ -114,6 +132,17 @@ DEFAULT_ENTITY_STATE_OVERRIDES = {
     "siren": "off",
     "status": "offline",
     "attributes": "{}",
+}
+
+ATTRIBUTE_SPLITS = {
+    "wireless/attributes": {
+        "wirelessNetwork": {"suffix": "wireless/network"},
+        "wirelessSignal": {"suffix": "wireless/signal"},
+    },
+    "battery/attributes": {
+        "batteryLevel": {"suffix": "battery/level"},
+        "batteryLife": {"suffix": "battery/life"},
+    },
 }
 
 _LOGGER = logging.getLogger(__name__)
@@ -157,6 +186,28 @@ def _default_state_for_topic(topic_suffix: str):
         return DEFAULT_TOPIC_STATE_OVERRIDES[topic_suffix]
     base = topic_suffix.split("/", 1)[0] if topic_suffix else ""
     return DEFAULT_ENTITY_STATE_OVERRIDES.get(base, DEFAULT_SENSOR_STATE)
+
+
+def _split_attribute_payload(camera_id: str, topic_suffix: str, payload_text: str, entity_manager):
+    mapping = ATTRIBUTE_SPLITS.get(topic_suffix)
+    if not mapping or not payload_text:
+        return
+
+    try:
+        parsed = json.loads(payload_text)
+    except (json.JSONDecodeError, TypeError):
+        return
+
+    for key, spec in mapping.items():
+        if key not in parsed:
+            continue
+        suffix = spec["suffix"]
+        sensor = entity_manager.get_or_create(camera_id, suffix)
+        try:
+            child_payload = json.dumps({"state": parsed[key]}, ensure_ascii=False)
+        except (TypeError, ValueError):
+            child_payload = json.dumps({"state": str(parsed[key])})
+        sensor.handle_payload(child_payload)
 
 
 def _normalize_state(value):
@@ -369,14 +420,14 @@ async def async_setup_entry(hass, entry, async_add_entities):
 
         topic_suffix = topic.topic_suffix or "state"
         payload_text = _decode_payload(msg.payload)
-        camera_id = topic.device_id
-
-        meta = camera_meta.get(camera_id)
-        if not meta:
-            legacy_meta = camera_meta.get(topic.location_id)
-            if legacy_meta:
-                meta = legacy_meta
-                camera_meta[camera_id] = meta
+        "wireless/attributes": {
+            "wirelessNetwork": {"suffix": "wireless/network"},
+            "wirelessSignal": {"suffix": "wireless/signal"},
+        },
+        "battery/attributes": {
+            "batteryLevel": {"suffix": "battery/level"},
+            "batteryLife": {"suffix": "battery/life"},
+        },
                 entity_manager.update_camera_meta(camera_id, meta)
                 if topic.location_id in event_entity_index and camera_id not in event_entity_index:
                     event_entity_index[camera_id] = event_entity_index[topic.location_id]
@@ -401,6 +452,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
 
         sensor_entity = entity_manager.get_or_create(camera_id, topic_suffix)
         sensor_entity.handle_payload(payload_text)
+        _split_attribute_payload(camera_id, topic_suffix, payload_text, entity_manager)
 
         base_event = topic.entity or topic_suffix.split("/", 1)[0]
         if topic_suffix.endswith("/state") and base_event in {"motion", "ding"} and _payload_is_active(payload_text):
