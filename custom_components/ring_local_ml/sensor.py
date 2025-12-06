@@ -19,6 +19,7 @@ from .recorder.recorder import Recorder
 from .ml.detector import Detector
 from .storage.db import record_event
 from .storage.filesystem import create_media_paths, get_clip_path, get_snapshot_path
+from .mqtt import parse_ring_topic, SUPPORTED_RING_CATEGORIES
 
 
 PRE_EVENT_SECONDS = 5
@@ -33,55 +34,86 @@ def _default_camera_name(camera_id: str) -> str:
     return "Ring Camera"
 
 DEFAULT_TOPIC_SUFFIXES = [
-    "motion",
-    "ding",
-    "doorbell/state",
-    "doorbell/event",
-    "battery/level",
-    "battery/charging",
-    "health/state",
-    "health/online",
-    "wifi/signal",
-    "wifi/rssi",
-    "snapshot/url",
-    "snapshot/available",
+    "motion/state",
+    "motion/attributes",
+    "ding/state",
+    "ding/attributes",
+    "motion_detection/state",
+    "motion_warning/state",
     "light/state",
-    "pir/state",
+    "siren/state",
+    "info/state",
+    "snapshot/attributes",
+    "snapshot_interval/state",
+    "stream/state",
+    "stream/attributes",
+    "event_stream/state",
+    "event_stream/attributes",
+    "event_select/state",
+    "event_select/attributes",
+    "motion_duration/state",
+    "ding_duration/state",
 ]
 
 TOPIC_LABELS = {
-    "motion": "Motion",
-    "ding": "Doorbell",
-    "doorbell/state": "Doorbell State",
-    "doorbell/event": "Doorbell Event",
-    "battery/level": "Battery Level",
-    "battery/charging": "Battery Charging",
-    "health/state": "Health State",
-    "health/online": "Health Online",
-    "wifi/signal": "Wi-Fi Signal",
-    "wifi/rssi": "Wi-Fi RSSI",
-    "snapshot/url": "Snapshot URL",
-    "snapshot/available": "Snapshot Available",
+    "motion/state": "Motion",
+    "motion/attributes": "Motion Attributes",
+    "ding/state": "Doorbell",
+    "ding/attributes": "Doorbell Attributes",
+    "motion_detection/state": "Motion Detection",
+    "motion_warning/state": "Motion Warning",
     "light/state": "Light State",
-    "pir/state": "PIR State",
+    "siren/state": "Siren State",
+    "info/state": "Device Info",
+    "snapshot/attributes": "Snapshot Attributes",
+    "snapshot_interval/state": "Snapshot Interval",
+    "stream/state": "Live Stream",
+    "stream/attributes": "Stream Status",
+    "event_stream/state": "Event Stream",
+    "event_stream/attributes": "Event Stream Status",
+    "event_select/state": "Event Selector",
+    "event_select/attributes": "Event Metadata",
+    "motion_duration/state": "Motion Duration",
+    "ding_duration/state": "Ding Duration",
 }
 
 DEFAULT_SENSOR_STATE = "idle"
-DEFAULT_TOPIC_STATES = {
+DEFAULT_TOPIC_STATE_OVERRIDES = {
+    "motion/state": "idle",
+    "ding/state": "idle",
+    "motion_detection/state": "off",
+    "motion_warning/state": "off",
+    "light/state": "off",
+    "siren/state": "off",
+    "stream/state": "inactive",
+    "stream/attributes": "{}",
+    "event_stream/state": "inactive",
+    "event_stream/attributes": "{}",
+    "event_select/state": "Motion 1",
+    "event_select/attributes": "{}",
+    "snapshot/attributes": "{}",
+    "snapshot_interval/state": 0,
+    "info/state": "{}",
+    "motion/attributes": "{}",
+    "ding/attributes": "{}",
+    "motion_duration/state": 120,
+    "ding_duration/state": 120,
+}
+DEFAULT_ENTITY_STATE_OVERRIDES = {
     "motion": "idle",
     "ding": "idle",
-    "doorbell/state": "idle",
-    "doorbell/event": "idle",
-    "battery/level": 0,
-    "battery/charging": "off",
-    "health/state": "initializing",
-    "health/online": "offline",
-    "wifi/signal": 0,
-    "wifi/rssi": -100,
-    "snapshot/url": "",
-    "snapshot/available": "off",
-    "light/state": "off",
-    "pir/state": "idle",
+    "info": "{}",
+    "snapshot": "{}",
+    "snapshot_interval": 0,
+    "stream": "inactive",
+    "event_stream": "inactive",
+    "event_select": "Motion 1",
+    "motion_detection": "off",
+    "motion_warning": "off",
+    "light": "off",
+    "siren": "off",
+    "status": "offline",
+    "attributes": "{}",
 }
 
 _LOGGER = logging.getLogger(__name__)
@@ -121,7 +153,10 @@ def _topic_label(topic_suffix: str) -> str:
 
 
 def _default_state_for_topic(topic_suffix: str):
-    return DEFAULT_TOPIC_STATES.get(topic_suffix, DEFAULT_SENSOR_STATE)
+    if topic_suffix in DEFAULT_TOPIC_STATE_OVERRIDES:
+        return DEFAULT_TOPIC_STATE_OVERRIDES[topic_suffix]
+    base = topic_suffix.split("/", 1)[0] if topic_suffix else ""
+    return DEFAULT_ENTITY_STATE_OVERRIDES.get(base, DEFAULT_SENSOR_STATE)
 
 
 def _normalize_state(value):
@@ -321,31 +356,54 @@ async def async_setup_entry(hass, entry, async_add_entities):
     @callback
     def message_received(msg):
         """Handle new MQTT messages from the Ring-MQTT addon."""
-        topic_parts = msg.topic.split("/")
-        if len(topic_parts) < 3:
+        topic = parse_ring_topic(msg.topic)
+        if not topic or topic.category not in SUPPORTED_RING_CATEGORIES:
             return
 
-        camera_id = topic_parts[1]
-        topic_suffix = "/".join(topic_parts[2:]) or "state"
-        payload_text = _decode_payload(msg.payload)
+        if topic.topic_suffix.endswith("image"):
+            return
 
-        if camera_id not in camera_meta:
-            camera_meta[camera_id] = {
-                "id": camera_id,
-                "name": _default_camera_name(camera_id),
-            }
-            entity_manager.update_camera_meta(camera_id, camera_meta[camera_id])
-            entity_manager.prime_camera_topics(camera_id)
-            device_name = _camera_display_name(camera_id, camera_meta)
-            event_sensor = RingLocalMLEventSensor(camera_id, device_name)
-            event_entity_index[camera_id] = event_sensor
-            async_add_entities([event_sensor])
+        last_segment = topic.topic_suffix.split("/")[-1] if topic.topic_suffix else ""
+        if last_segment.endswith("command"):
+            return
+
+        topic_suffix = topic.topic_suffix or "state"
+        payload_text = _decode_payload(msg.payload)
+        camera_id = topic.device_id
+
+        meta = camera_meta.get(camera_id)
+        if not meta:
+            legacy_meta = camera_meta.get(topic.location_id)
+            if legacy_meta:
+                meta = legacy_meta
+                camera_meta[camera_id] = meta
+                entity_manager.update_camera_meta(camera_id, meta)
+                if topic.location_id in event_entity_index and camera_id not in event_entity_index:
+                    event_entity_index[camera_id] = event_entity_index[topic.location_id]
+                if topic.location_id in recorders and camera_id not in recorders:
+                    recorders[camera_id] = recorders[topic.location_id]
+            else:
+                meta = {
+                    "id": camera_id,
+                    "name": _default_camera_name(camera_id),
+                    "location_id": topic.location_id,
+                }
+                camera_meta[camera_id] = meta
+                entity_manager.update_camera_meta(camera_id, meta)
+                entity_manager.prime_camera_topics(camera_id)
+                device_name = _camera_display_name(camera_id, camera_meta)
+                event_sensor = RingLocalMLEventSensor(camera_id, device_name)
+                event_entity_index[camera_id] = event_sensor
+                async_add_entities([event_sensor])
+
+        meta.setdefault("location_id", topic.location_id)
+        meta.setdefault("category", topic.category)
 
         sensor_entity = entity_manager.get_or_create(camera_id, topic_suffix)
         sensor_entity.handle_payload(payload_text)
 
-        base_event = topic_parts[2]
-        if base_event in {"motion", "ding"} and _payload_is_active(payload_text):
+        base_event = topic.entity or topic_suffix.split("/", 1)[0]
+        if topic_suffix.endswith("/state") and base_event in {"motion", "ding"} and _payload_is_active(payload_text):
             event_sensor = event_entity_index.get(camera_id)
             if event_sensor:
                 event_sensor.handle_event(base_event, payload_text)

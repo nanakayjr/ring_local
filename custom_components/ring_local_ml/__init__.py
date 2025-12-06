@@ -5,6 +5,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 
 from .const import DOMAIN
+from .mqtt import parse_ring_topic, SUPPORTED_RING_CATEGORIES
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -37,10 +38,21 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
         @callback
         def _on_mqtt_message(msg):
             try:
-                topic_parts = msg.topic.split("/")
-                if len(topic_parts) < 2:
+                topic = parse_ring_topic(msg.topic)
+                if not topic or topic.category not in SUPPORTED_RING_CATEGORIES:
                     return
-                camera_id = topic_parts[1]
+
+                if topic.topic_suffix.endswith("image"):
+                    return
+
+                last_segment = topic.topic_suffix.split("/")[-1] if topic.topic_suffix else ""
+                if last_segment.endswith("command"):
+                    return
+
+                device_id = topic.device_id
+                location_id = topic.location_id
+                if not device_id:
+                    return
 
                 # Decode payload
                 payload = msg.payload
@@ -52,41 +64,54 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
                 else:
                     payload_text = str(payload)
 
-                # Try JSON first
+                # Try JSON first for RTSP hints
                 rtsp_url = None
                 try:
                     parsed = json.loads(payload_text)
                     for key in ("rtsp", "rtsp_url", "stream", "path", "url"):
-                        if key in parsed and isinstance(parsed[key], str) and parsed[key].startswith("rtsp"):
-                            rtsp_url = parsed[key]
+                        value = parsed.get(key)
+                        if isinstance(value, str) and value.startswith("rtsp"):
+                            rtsp_url = value
                             break
                 except Exception:
-                    # Not JSON — fall back to searching for an rtsp substring
                     m = re.search(r"rtsp://[\w:@\-\._~%/]+", payload_text)
                     if m:
                         rtsp_url = m.group(0)
 
-                # Update the config entry options (if camera not already present)
                 options = dict(entry.options)
                 cameras = options.setdefault("cameras", [])
-                if any(c.get("id") == camera_id for c in cameras):
+                if any(c.get("id") == device_id for c in cameras):
                     return
 
-                suffix = camera_id[-4:] if camera_id else ""
+                legacy_camera = next((c for c in cameras if c.get("id") == location_id), None)
+                if legacy_camera:
+                    legacy_camera["id"] = device_id
+                    legacy_camera.setdefault("location_id", location_id)
+                    legacy_camera.setdefault("category", topic.category)
+                    if rtsp_url and not legacy_camera.get("rtsp_url"):
+                        legacy_camera["rtsp_url"] = rtsp_url
+                    hass.config_entries.async_update_entry(entry, options=options)
+                    hass.async_create_task(hass.config_entries.async_reload(entry.entry_id))
+                    _LOGGER.info(
+                        "Updated Ring camera '%s' to device id %s",
+                        legacy_camera.get("name", device_id),
+                        device_id,
+                    )
+                    return
+
+                suffix = device_id[-4:] if device_id else ""
                 candidate = {
-                    "id": camera_id,
-                    "name": f"Ring Camera {suffix}" if suffix else f"Ring Camera {camera_id}",
+                    "id": device_id,
+                    "name": f"Ring Camera {suffix}" if suffix else f"Ring Camera {device_id}",
+                    "rtsp_url": rtsp_url or "",
+                    "location_id": location_id,
+                    "category": topic.category,
                 }
-                if rtsp_url:
-                    candidate["rtsp_url"] = rtsp_url
-                else:
-                    # leave rtsp_url empty so user can fill it in; we still
-                    # add the camera id so the MQTT sensors get created.
-                    candidate["rtsp_url"] = ""
 
                 cameras.append(candidate)
                 hass.config_entries.async_update_entry(entry, options=options)
-                _LOGGER.info("Discovered Ring camera '%s' via MQTT; added to options", camera_id)
+                hass.async_create_task(hass.config_entries.async_reload(entry.entry_id))
+                _LOGGER.info("Discovered Ring camera '%s' via MQTT; added to options", device_id)
             except Exception:
                 _LOGGER.debug("Error handling MQTT discovery message", exc_info=True)
 
